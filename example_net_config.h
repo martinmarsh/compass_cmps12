@@ -1,7 +1,7 @@
 // Enter your WiFi ssid and password for network A when available
 
-const char * ssid = "***********";
-const char * password = "***********";
+char * ssid = "***********";
+char * password = "***********";
 
 // Retries the above password a number of times before trying the second password
 // If second password also fails after retries starts again with the first
@@ -10,9 +10,9 @@ const char * password = "***********";
 
 // Enter your WiFi ssid and password for alternative B network  
 
-const char * ssid2 = "***********";
-const char * password2 = "***********";
+char * ssid2 = "***********";
+char * password2 = "***********";
 
 
-const int broadcastPort = 8005;
-const int listenPort = 8006;
+int broadcastPort = 8005;
+int listenPort = 8006;
