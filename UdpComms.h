@@ -4,7 +4,6 @@
 #include "WiFi.h"
 #include "AsyncUDP.h"
 
-
 enum wifi_states {
   WIFI_CONNECTING_STATE,
   WIFI_JUST_CONNECTED_STATE,
@@ -20,12 +19,10 @@ enum wifi_listen_states {
   WIFI_NOT_LITENING_ERROR
 };
 
-
 enum wifi_networks {
   A,
   B
 };
-
 
 
 class UdpComms {
@@ -35,6 +32,9 @@ class UdpComms {
     String connectStatusStr();
     void stateMachine();
     void broadcast(String message);
+    String localIP();
+    String listenPort();
+    String broadcastPort();
     int number_of_wifi_retries;
     int wifi_status;
     int wifi_listen_status;
@@ -49,11 +49,7 @@ class UdpComms {
     char* ssid2_;
     char* password2_;
     int broadcastPort_;
-    int listenPort_;
-    
+    int listenPort_;  
 };
 
-
-
 #endif
-

@@ -10,6 +10,7 @@
 #include "Dial.h"
 #include "Compass.h"
 #include "UdpComms.h"
+#include "Menu.h"
 
 
 //The wifi passwords are stored in net_config.h which is not commited to public repo
@@ -18,7 +19,6 @@
 //and comment in next line and comment out the example_net_config.h
 #include "net_config.h"
 //#include "example_net_config.h"
-
 
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 32  // OLED display height, in pixels
@@ -40,9 +40,8 @@ int g_loop_cyles = 0;
 
 float g_battery_volts;
 
-
-
 enum states { COMPASS_STATE,
+              AUTO_START_STATE,
               AUTO_STATE,
               OFF_MENU_STATE,
               ON_MENU_STATE,
@@ -53,29 +52,30 @@ enum actions { NO_ACTION,
               DIAL_ACTION};
 
 int g_state = COMPASS_STATE;
-
-
 float g_desired_heading = 0;
-
 int g_led_state = HIGH;
 
-UdpComms udpComms(ssid, password, ssid2, password2, broadcastPort, listenPort, RETRY_PASSWORD);
+UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
+
+
+char * off_menu_items[] = {"Exit", "on", "Gain", "Pi", "PD"};
+Menu off_menu(off_menu_items);
+
 
 void setup() {
-  uint8_t* bufferpt;
-
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PUSH_BUTTON, INPUT_PULLUP);
-
-  
   Serial.begin(115200);
   Serial.println("Starting");
   g_led_state = HIGH;
   digitalWrite(LED_BUILTIN, g_led_state);
 
+  //offMenu.items = off_menu_items;
+  Serial.println(off_menu_items[2]);
+  Serial.println(off_menu.items[2]);
+
   delay(1000);  // Pause for 1 seconds
   Serial.println("Setting Display Voltage");
-
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
@@ -86,13 +86,8 @@ void setup() {
   digitalWrite(LED_BUILTIN, g_led_state);
 
   display.display();
-
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
-  // display.display();
-  //delay(2000);  // Pause for 2 seconds
-
-  // Clear the buffer
   display.clearDisplay();
 
   Wire.begin();            // start i2C
@@ -100,7 +95,6 @@ void setup() {
 
   digitalWrite(LED_BUILTIN, HIGH);
   delay(2000);
-  display.clearDisplay();
   g_loop_counter = 0;
   g_loop_cyles = 0;
 
@@ -142,6 +136,7 @@ void update() {
     Serial.printf("Read Button pushed %i \n", action);
   } else if (dial.hasDialChanged()) {
     action = DIAL_ACTION;
+    Serial.printf("Dial has changed %i \n", action);
   } else {
     action = NO_ACTION;
   }
@@ -151,22 +146,29 @@ void update() {
       switch(action){
         case BUTTON_PUSHED_ACTION:
           Serial.printf("Push action compass state %i \n", action);
-          displayOffMenu();
+          //g_state = OFF_MENU_STATE;
+          g_state = AUTO_START_STATE;
+          //displayOffMenu();
           break;
         default:
-          displayCompass(2);
+          displayCompass(1);
         break;
       }
       break;
 
-    case AUTO_STATE:
+    case AUTO_START_STATE:
+       Serial.println("Auto start state");
+      dial.setBase(8, compass.heading);    //8 turns for 360 - current heading is set on dial
+      g_state = AUTO_STATE;
+      break;
 
+    case AUTO_STATE:
+      Serial.println("Auto state");
       switch(action){
         case BUTTON_PUSHED_ACTION:
-          displayOnMenu();
-          g_state = ON_MENU_STATE;
-          break;
-        case DIAL_ACTION:
+          //displayOnMenu();
+          //g_state = ON_MENU_STATE;
+          displayCompass(2);
           break;
         default:
           displayCompass(2);
@@ -175,10 +177,8 @@ void update() {
       break;
 
     case ON_MENU_STATE:
-
-     switch(action){
-        case BUTTON_PUSHED_ACTION:
-          
+      switch(action){
+        case BUTTON_PUSHED_ACTION:    
           break;
         case DIAL_ACTION:
           nextMenuItem();
@@ -190,10 +190,8 @@ void update() {
       break;
 
     case OFF_MENU_STATE:
-
      switch(action){
-        case BUTTON_PUSHED_ACTION:
-         
+        case BUTTON_PUSHED_ACTION: 
           break;
         case DIAL_ACTION:
           nextMenuItem();
@@ -203,7 +201,6 @@ void update() {
       }
       break;
 
-
     default:
       displayCompass(1);
       break;
@@ -212,15 +209,11 @@ void update() {
 }
 
 
-
 void slow_update() {
-
   g_battery_volts = analogRead(A0) * 0.001792;
-
   dial.checkAS5600Setup();  // check the magnet is present)
 
   udpComms.stateMachine();
-
   if (udpComms.wifi_status == WIFI_JUST_CONNECTED_STATE){
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -228,10 +221,10 @@ void slow_update() {
     display.setTextColor(SSD1306_WHITE);
     display.println(F("WiFi Connected"));
     display.print(F("IP: "));
-    display.println(WiFi.localIP());
-    String listenStr = "UDP Listen Port: " + String(listenPort);
+    display.println(udpComms.localIP());
+    String listenStr = "UDP Listen Port: " + udpComms.listenPort();
     display.println(listenStr);
-    listenStr = "Broadcast Port: " + String(broadcastPort);
+    listenStr = "Broadcast Port: " + udpComms.broadcastPort();
     display.println(listenStr);
     display.display();
      
@@ -289,7 +282,7 @@ void displayOffMenu() {
   display.clearDisplay();  // Clear the display buffer
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
-  display.println(F("On   Gain PI   PD"));
+  display.println(F("Exit On   Gain PI   PD"));
  
 }
 
@@ -307,8 +300,7 @@ void displayCompass(int type) {
   float course_error;
   float abs_course_error;
   String heading_str, wifi_status_str, display_str, desired_heading_str, course_error_str;
-
-  g_desired_heading = dial.getFineRotation(6);
+  g_desired_heading = dial.getRotation();
   course_error = compass.courseError(g_desired_heading);
   abs_course_error = abs(course_error);
 

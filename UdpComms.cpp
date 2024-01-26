@@ -20,6 +20,17 @@ UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int
     this->listenPort_ = listenPort;
 }
 
+String UdpComms::localIP(){
+  return String(WiFi.localIP());
+}
+
+String UdpComms::listenPort(){
+  return String(this->listenPort_);
+
+}
+String UdpComms::broadcastPort(){
+   return String(this->broadcastPort_);
+}
 
 void UdpComms::connectWiFi_() {
 

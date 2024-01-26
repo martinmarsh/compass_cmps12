@@ -7,6 +7,9 @@ Dial::Dial() {
   this->rotations_ = 0;
   this->button_pushed_= false;
   this->AS5600Setup_ = false;
+  this->turns_modulus_ = 4096;
+  this->scale_turns_ = 0.087890625;
+  this->offset_= 0;
 }
 
 
@@ -44,9 +47,31 @@ void Dial::checkAS5600Setup() {
   }
 }
 
-float Dial::getFineRotation(int turns) {
+void Dial::setBase(int turns, float offset_degrees) {
+  // sets number of full turns/rotations for 360
+  // sets the zero point in degrees.
+  // Can be changes any time before getRoation
+  if (turns > 0) {
+    this->turns_modulus_ = 4096 * turns;
+    this->scale_turns_ = 0.087890625 / turns;
+    this->offset_= offset_degrees;
+  } 
+}
+
+float Dial::withinCircle(float x){
+  // Not so eligant as:
+  // x= i%360 ;
+  // x += x<0?360:0;
+  // which should work for modern C++ implementations
+  // but does not rely on undefined behaviour of negatives in mod
+  while (x > 360.0) x -= 360.0;
+  while (x < 0) x += 360.0;
+  return x;
+}
+
+float Dial::getRotation() {
   // turns is number of roations for 360
-  return abs((this->angle_ + this->rotations_ * 4096) % (4096 * turns)) * 0.087890625 / turns;
+  return this->withinCircle((abs((this->angle_ + this->rotations_ * 4096) % (this->turns_modulus_)) * this->scale_turns_) + this->offset_);
 }
 
 // AS5600 Rotation sensor  Code

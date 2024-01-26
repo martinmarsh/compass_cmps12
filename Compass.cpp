@@ -47,11 +47,9 @@ float Compass::courseError(float desired_heading){
   return this->relative180(this->heading - desired_heading);
 }
 
-
 String Compass::bitToStr_(int b) {
   return String(b & 0x03);
 }
-
 
 float Compass::relative180(float dif) {
   if (dif < -180.0) {
@@ -62,7 +60,3 @@ float Compass::relative180(float dif) {
   }
   return dif;
 }
-
-
-
-

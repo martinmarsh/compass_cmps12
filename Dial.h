@@ -7,6 +7,18 @@
 #define PUSH_BUTTON D2
 
 class Dial  {
+  
+  public:
+    Dial();
+    bool wasButtonPushed();
+    bool readPushButton();
+    bool hasDialChanged();
+    void readAngle();
+    void checkAS5600Setup();
+    float getRotation();
+    void  setBase(int turns, float offset_degrees);
+    float withinCircle(float x);
+    
   private:
     bool button_pushed_;
     int angle_;                   // angle 4096 full circle
@@ -15,6 +27,9 @@ class Dial  {
     int last_rotations_;
     bool AS5600Setup_; 
     int magnet_status_;
+    int turns_modulus_;
+    float scale_turns_;
+    float offset_ ;               //degress
 
     int last_angle_read_;         // used rotation detector only
 
@@ -22,19 +37,6 @@ class Dial  {
     void readRawAngle_();
     void computeRotations_();
  
-
-  public:
-    Dial();
-    bool wasButtonPushed();
-    bool readPushButton();
-    bool hasDialChanged();
-    void readAngle();
-    void checkAS5600Setup();
-    float getFineRotation(int turns);
-    
 };
 
-
-
 #endif
-

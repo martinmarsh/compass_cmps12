@@ -25,11 +25,6 @@ class Compass  {
     float bosh_heading_;
     float pitch1_;
      
-   
-
 };
 
-
-
 #endif
-
