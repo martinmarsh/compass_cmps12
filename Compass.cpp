@@ -14,7 +14,7 @@ void Compass::readCompass() {
   Wire.endTransmission(false);
   Wire.requestFrom(CMPS12, 4);
   this->heading = (int16_t)(Wire.read() << 8 | Wire.read()) / 10.00;  //Two bytes Yaw in range of (0 to 359 degrees)
-  this->pitch1_ = ((int8_t)Wire.read());                                // One byte pitch in range of (-90 to 90 degrees)
+  this->pitch1_ = ((int8_t)Wire.read());                              // One byte pitch in range of (-90 to 90 degrees)
   this->roll = ((int8_t)Wire.read());                                 // One byte roll in range of (-90 to 90 degrees)
 
   Wire.beginTransmission(CMPS12);

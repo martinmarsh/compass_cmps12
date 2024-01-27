@@ -32,35 +32,46 @@
 #define SCREEN_ADDRESS 0x3C  ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+
 Dial dial;
 Compass compass;
 
 int g_loop_counter = 0;
 int g_loop_cyles = 0;
 
-float g_battery_volts;
+int g_gain = 100;
+int g_pi = 100;
+int g_pd = 100;
 
-enum states { COMPASS_STATE,
-              AUTO_START_STATE,
-              AUTO_STATE,
-              OFF_MENU_STATE,
-              ON_MENU_STATE,
-              };
+bool g_start = true;
+
+float g_battery_volts;
 
 enum actions { NO_ACTION,
                BUTTON_PUSHED_ACTION,
-              DIAL_ACTION};
+               DIAL_ACTION};
 
-int g_state = COMPASS_STATE;
+states g_state = COMPASS_STATE;
+states g_last_state;
 float g_desired_heading = 0;
 int g_led_state = HIGH;
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
+ 
+char * off_choices[] = {"Exit", "on", "Gain", "Pi", "PD"};
+states off_states[] = {COMPASS_STATE, AUTO_START_STATE, GAIN_STATE, PI_STATE, PD_STATE};
+char * on_choices[] = {"Exit", "off", "tack", "Gain", "Pi", "PD"};
+states on_states[] = {AUTO_STATE, COMPASS_STATE, TACK_STATE, GAIN_STATE, PI_STATE, PD_STATE};
+states confim_port_tack[] = {PORT_TACK_STATE, AUTO_STATE};
+states confim_star_tack[] = {STAR_TACK_STATE, AUTO_STATE};
+char * tack_abort[] = {"tack now", "abort"};
 
+states yes_no_states[] = {COMPASS_STATE, AUTO_START_STATE};
+Menu offMenu(off_choices, 5, off_states, &display);
+Menu onMenu(on_choices, 6, on_states, &display);
 
-char * off_menu_items[] = {"Exit", "on", "Gain", "Pi", "PD"};
-Menu off_menu(off_menu_items);
-
+Menu confirmPortMenu(tack_abort, 2, confim_port_tack, &display);
+Menu confirmStarMenu(tack_abort, 2, confim_star_tack, &display);
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -70,9 +81,6 @@ void setup() {
   g_led_state = HIGH;
   digitalWrite(LED_BUILTIN, g_led_state);
 
-  //offMenu.items = off_menu_items;
-  Serial.println(off_menu_items[2]);
-  Serial.println(off_menu.items[2]);
 
   delay(1000);  // Pause for 1 seconds
   Serial.println("Setting Display Voltage");
@@ -82,6 +90,8 @@ void setup() {
     for (;;)
       ;  // Don't proceed, loop forever
   }
+
+
   g_led_state = LOW;
   digitalWrite(LED_BUILTIN, g_led_state);
 
@@ -134,77 +144,104 @@ void update() {
   if (dial.wasButtonPushed()) {
     action = BUTTON_PUSHED_ACTION;
     Serial.printf("Read Button pushed %i \n", action);
-  } else if (dial.hasDialChanged()) {
-    action = DIAL_ACTION;
-    Serial.printf("Dial has changed %i \n", action);
   } else {
     action = NO_ACTION;
   }
   
   switch (g_state) {
     case COMPASS_STATE:
-      switch(action){
-        case BUTTON_PUSHED_ACTION:
-          Serial.printf("Push action compass state %i \n", action);
-          //g_state = OFF_MENU_STATE;
-          g_state = AUTO_START_STATE;
-          //displayOffMenu();
-          break;
-        default:
-          displayCompass(1);
-        break;
-      }
+      if (action == BUTTON_PUSHED_ACTION){
+        Serial.printf("Push action compass state %i \n", action);
+        g_state = OFF_MENU_STATE;
+        g_last_state = COMPASS_STATE;
+        Serial.println("Setting base");
+        dial.setBase(1, 0);
+        Serial.println("Setting base set");
+      } 
+      displayCompass(1);
       break;
 
     case AUTO_START_STATE:
-       Serial.println("Auto start state");
+      Serial.println("Auto start state");
       dial.setBase(8, compass.heading);    //8 turns for 360 - current heading is set on dial
       g_state = AUTO_STATE;
       break;
 
     case AUTO_STATE:
-      Serial.println("Auto state");
-      switch(action){
-        case BUTTON_PUSHED_ACTION:
-          //displayOnMenu();
-          //g_state = ON_MENU_STATE;
-          displayCompass(2);
-          break;
-        default:
-          displayCompass(2);
-        break;
+      if (action == BUTTON_PUSHED_ACTION){
+        g_state = ON_MENU_STATE;
+        g_last_state = AUTO_STATE;
+        dial.setBase(1, 0);
       }
+      displayCompass(2);
       break;
 
     case ON_MENU_STATE:
-      switch(action){
-        case BUTTON_PUSHED_ACTION:    
-          break;
-        case DIAL_ACTION:
-          nextMenuItem();
-          break;
-        default:
-          displayOnMenu();
-        break;
-      }
+      if (action == BUTTON_PUSHED_ACTION){
+        g_state = onMenu.selectedState();
+      } 
+      onMenu.display(dial.getRotation());
       break;
 
     case OFF_MENU_STATE:
-     switch(action){
-        case BUTTON_PUSHED_ACTION: 
-          break;
-        case DIAL_ACTION:
-          nextMenuItem();
-          break;
-        default:
-           displayOffMenu();
-      }
+      if (action == BUTTON_PUSHED_ACTION){
+        g_state = offMenu.selectedState();
+      } 
+      offMenu.display(dial.getRotation());
       break;
 
-    default:
-      displayCompass(1);
+    case GAIN_STATE:
+      if (action == BUTTON_PUSHED_ACTION){
+        g_start = true;
+        g_state = g_last_state;
+      } 
+      if(g_start == true){
+        dial.setBase(4, g_gain/2);
+        g_start = false;
+      }
+      g_gain = dial.getRotation() * 2;
+      setParamDisplay(g_gain, "Set Gain:");
       break;
+
+    case PI_STATE:
+      if (action == BUTTON_PUSHED_ACTION){
+        g_start = true;
+        g_state = g_last_state;
+      } 
+      if(g_start == true){
+        dial.setBase(4, g_pi/2);
+        g_start = false;
+      }
+      g_pi = dial.getRotation() * 2;
+      setParamDisplay(g_pi, "Set PI:");
+      break;
+
+    case PD_STATE:
+      if (action == BUTTON_PUSHED_ACTION){
+        g_start = true;
+        g_state = g_last_state;
+      } 
+      if(g_start == true){
+        dial.setBase(4, g_pd/2);
+        g_start = false;
+      }
+      g_pd= dial.getRotation() * 2;
+      setParamDisplay(g_pd, "Set PD:");
+      break;
+    //case CONFIRM_PORT_TACK_STATE:
+    //  break;
+    //case CONFIRM_STAR_TACK_STATE:
+    //  break;
+    //case PORT_TACK_STATE:
+    //  break;
+    //case STAR_TACK_STATE:
+    //  break;
+    default:
+      g_state =  COMPASS_STATE;
+
   }
+  while( dial.wasButtonPushed());
+  
   
 }
 
@@ -273,25 +310,18 @@ void fast_update() {
 */
 
 
-void nextMenuItem(){
-  
 
-}
 
-void displayOffMenu() {
-  display.clearDisplay();  // Clear the display buffer
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.println(F("Exit On   Gain PI   PD"));
- 
-}
-
-void displayOnMenu() {
-  display.clearDisplay();  // Clear the display buffer
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.println(F("Off  Gain PI   PD"));
- 
+void setParamDisplay(int p, String label){
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.setTextSize(1);
+      display.setTextColor(SSD1306_WHITE);
+      display.print(label);
+      display.setCursor(0, 16);
+      display.setTextSize(2);
+      display.println(p);
+      display.display();
 }
 
 

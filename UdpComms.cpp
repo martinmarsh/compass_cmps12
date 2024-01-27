@@ -21,7 +21,8 @@ UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int
 }
 
 String UdpComms::localIP(){
-  return String(WiFi.localIP());
+  Serial.println(WiFi.localIP());
+  return WiFi.localIP().toString();
 }
 
 String UdpComms::listenPort(){

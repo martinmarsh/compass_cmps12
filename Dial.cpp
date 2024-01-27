@@ -30,6 +30,8 @@ bool Dial::readPushButton() {
 bool Dial::hasDialChanged(){
   bool ret = false;
   if (this->angle_ != this->last_angle_ || this->rotations_ != this->last_rotations_) ret = true;
+  this->last_angle_  = this->angle_;
+  this->last_rotations_ = this->rotations_ ;
   return ret;  
 }
 
@@ -54,8 +56,11 @@ void Dial::setBase(int turns, float offset_degrees) {
   if (turns > 0) {
     this->turns_modulus_ = 4096 * turns;
     this->scale_turns_ = 0.087890625 / turns;
-    this->offset_= offset_degrees;
-  } 
+    this->offset_= 0;   //zero offset for getRotation to find true rotation
+
+    this->offset_ = this->getRotation() - offset_degrees;
+    Serial.printf("Dial base = %i, offset: %.2f\n",turns, this->offset_);
+  }
 }
 
 float Dial::withinCircle(float x){
@@ -71,7 +76,7 @@ float Dial::withinCircle(float x){
 
 float Dial::getRotation() {
   // turns is number of roations for 360
-  return this->withinCircle((abs((this->angle_ + this->rotations_ * 4096) % (this->turns_modulus_)) * this->scale_turns_) + this->offset_);
+  return this->withinCircle((abs((this->angle_ + this->rotations_ * 4096) % (this->turns_modulus_)) * this->scale_turns_) - this->offset_);
 }
 
 // AS5600 Rotation sensor  Code
