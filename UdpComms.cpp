@@ -4,6 +4,11 @@
 #include "WiFi.h"
 
 
+//globals are required to access be in scope within Async call back
+uint8_t g_recBuf[61];
+int g_recLen;
+bool g_recLocked;           
+
 UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int broadcastPort, int listenPort, int retry_attempts) {
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
@@ -18,10 +23,23 @@ UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int
     this->password2_ = password2;
     this->broadcastPort_ = broadcastPort;
     this->listenPort_ = listenPort;
+    g_recLocked = false;
+}
+
+String UdpComms::getMessage(){
+  if (g_recLocked == true){
+      return String((char*) &g_recBuf);
+  } 
+  return "";
+}
+
+void UdpComms::nextMessage(){
+  if (g_recLocked == true){
+    g_recLocked = false;
+  } 
 }
 
 String UdpComms::localIP(){
-  Serial.println(WiFi.localIP());
   return WiFi.localIP().toString();
 }
 
@@ -77,7 +95,7 @@ String UdpComms::connectStatusStr(){
 }
 
 void UdpComms::stateMachine(){
-
+  
   switch (this->wifi_status) {
     case WIFI_CONNECTING_STATE:
       this->connectWiFi_();
@@ -97,13 +115,20 @@ void UdpComms::stateMachine(){
     case WIFI_LISTENING_PORT_READY_STATE:
       Serial.println("Port ready Listening starting");
       this->udp_.onPacket([](AsyncUDPPacket packet) {
-        uint8_t buf[20];
-        size_t l = packet.read(buf, 20);
-        Serial.print("Data: ");
-        Serial.write(packet.data(), packet.length());
-        Serial.println();
-        packet.printf("Got %u bytes of data", packet.length());
+        if ( !g_recLocked){ 
+          //only supports one packet length message
+          g_recLocked = true;
+          size_t g_recLen = packet.read(g_recBuf, 60);
+          if (g_recLen > 0 && g_recLen <= 61) {
+              g_recBuf[g_recLen] = 0;
+              packet.printf("Got %u bytes\n", g_recLen);
+          } else{
+            // discard packet
+            g_recLocked = true;
+          }
+        }
       });
+        
       this->wifi_listen_status = WIFI_LISTENING_STATE;
       break;
   }

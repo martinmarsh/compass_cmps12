@@ -10,6 +10,7 @@ Dial::Dial() {
   this->turns_modulus_ = 4096;
   this->scale_turns_ = 0.087890625;
   this->offset_= 0;
+  this->button_release_count_ = 0;
 }
 
 
@@ -17,14 +18,22 @@ bool Dial::wasButtonPushed() {
   bool ret = this->button_pushed_ ;
   this->button_pushed_ = false;
   return ret;
-}
+} 
 
 
 bool Dial::readPushButton() {
-  if (digitalRead(PUSH_BUTTON) == LOW) {
+  bool state = (digitalRead(PUSH_BUTTON) == LOW);
+        
+  if (this->button_release_count_ <= 0 &&  state == true){
     this->button_pushed_= true;
+    this->button_release_count_ = 10;
+    Serial.printf("button down %i\n", this->button_release_count_ );
+  } else if (state == true){
+    this->button_release_count_ = 10;
+  } else {
+    --this->button_release_count_;
   }
-}
+} 
 
 
 bool Dial::hasDialChanged(){

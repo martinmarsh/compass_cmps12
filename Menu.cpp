@@ -12,7 +12,7 @@ Menu::Menu(char **items, int item_count,states *state_items, Adafruit_SSD1306 *d
   this->state_items = state_items;
 }
 
-states Menu::selectedState(){ 
+states Menu::selectedState(){
   return this->state_items[this->selected];
 }
 
@@ -25,7 +25,6 @@ void Menu::display(int dial_position) {
   this->pdisplay_->setTextSize(1);
   this->pdisplay_->setCursor(0, 0);
   for(int i = 0; i < this->item_count; ++i){
-    Serial.printf("Printing %s\n", this->items[i]);
     if(i > 0) this->pdisplay_->print(F(" "));
     if(i == this->selected) this->pdisplay_->print(F("|"));
     else this->pdisplay_->print(this->items[i]);
@@ -34,6 +33,5 @@ void Menu::display(int dial_position) {
   this->pdisplay_->setCursor(0, 16);
   this->pdisplay_->print(this->items[this->selected]);
   this->pdisplay_->display();
-
 }
 

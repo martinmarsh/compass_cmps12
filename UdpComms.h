@@ -16,7 +16,7 @@ enum wifi_listen_states {
   WIFI_TRY_LISTENING_STATE,
   WIFI_LISTENING_PORT_READY_STATE,
   WIFI_LISTENING_STATE,
-  WIFI_NOT_LITENING_ERROR
+  WIFI_NOT_LISTENING_ERROR
 };
 
 enum wifi_networks {
@@ -35,10 +35,13 @@ class UdpComms {
     String localIP();
     String listenPort();
     String broadcastPort();
+    String getMessage();
+    void nextMessage();
     int number_of_wifi_retries;
     int wifi_status;
     int wifi_listen_status;
     int wifi_network;
+    
    
   private:
     AsyncUDP udp_;

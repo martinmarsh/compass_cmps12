@@ -8,6 +8,8 @@
 enum states { COMPASS_STATE,
               AUTO_START_STATE,
               AUTO_STATE,
+              AUTO_RETURN_STATE,
+              IP_STATE,
               OFF_MENU_STATE,
               ON_MENU_STATE,
               GAIN_STATE,

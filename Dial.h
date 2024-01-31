@@ -30,6 +30,7 @@ class Dial  {
     int turns_modulus_;
     float scale_turns_;
     float offset_ ;               //degress
+    int button_release_count_;
 
     int last_angle_read_;         // used rotation detector only
 
