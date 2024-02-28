@@ -17,6 +17,7 @@ enum states { COMPASS_STATE,
               PD_STATE,
               CONFIRM_PORT_TACK_STATE,
               CONFIRM_STAR_TACK_STATE,
+              CONFIRM_WHICH_TACK_STATE,
               TACK_STATE,
               PORT_TACK_STATE,
               STAR_TACK_STATE };

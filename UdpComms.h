@@ -35,8 +35,9 @@ class UdpComms {
     String localIP();
     String listenPort();
     String broadcastPort();
-    String getMessage();
+    bool messageAvailable();
     void nextMessage();
+    char* receivedMessage;
     int number_of_wifi_retries;
     int wifi_status;
     int wifi_listen_status;
@@ -53,6 +54,7 @@ class UdpComms {
     char* password2_;
     int broadcastPort_;
     int listenPort_;  
+    bool messageReady_;
 };
 
 #endif

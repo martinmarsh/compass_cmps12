@@ -34,16 +34,15 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define LOOP_DELAY 33      //Each loop is 3*loop_delay ms= fast_update period
   
-
 Dial dial;
 Compass compass;
-
 
 float g_gain = 100;
 float g_pi = 100;
 float g_pd = 100;
 
 bool g_start = true;
+bool g_auto_on = false;
 
 float g_battery_volts;
 
@@ -55,23 +54,27 @@ states g_state = COMPASS_STATE;
 states g_last_state;
 float g_desired_heading = 0;
 
-
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
  
 char * off_choices[] = {"Exit", "on", "IP", "Gain", "Pi", "PD"};
 states off_states[] = {COMPASS_STATE, AUTO_START_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
 char * on_choices[] = {"Exit", "off", "tack", "IP", "Gain", "Pi", "PD"};
 states on_states[] = {AUTO_STATE, COMPASS_STATE, TACK_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
-states confim_port_tack[] = {PORT_TACK_STATE, AUTO_STATE};
-states confim_star_tack[] = {STAR_TACK_STATE, AUTO_STATE};
-char * tack_abort[] = {"tack now", "abort"};
+states confim_port_tack[] = {PORT_TACK_STATE, AUTO_RETURN_STATE};
+states confim_star_tack[] = {STAR_TACK_STATE, AUTO_RETURN_STATE};
+states confim_which_tack[] = {AUTO_RETURN_STATE, PORT_TACK_STATE, STAR_TACK_STATE};
 
-states yes_no_states[] = {COMPASS_STATE, AUTO_START_STATE};
+char * tack_starboard[] = {"Go -->", "abort"};
+char * tack_port[] = {"Go <--", "abort"};
+char * tack_which[] = {"tack abort", "<--", "-->"};
+
 Menu offMenu(off_choices, 6, off_states, &display);
 Menu onMenu(on_choices, 7, on_states, &display);
 
-Menu confirmPortMenu(tack_abort, 2, confim_port_tack, &display);
-Menu confirmStarMenu(tack_abort, 2, confim_star_tack, &display);
+Menu confirmPortMenu(tack_port, 2, confim_port_tack, &display);
+Menu confirmStarMenu(tack_starboard, 2, confim_star_tack, &display);
+Menu confirmWhichMenu(tack_which, 3, confim_which_tack, &display);
+
 
 int update_counter = 0;
 int slow_update_counter = 0;
@@ -85,7 +88,6 @@ void setup() {
 
   digitalWrite(LED_BUILTIN, HIGH);
 
-
   delay(1000);  // Pause for 1 seconds
   Serial.println("Setting Display Voltage");
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -94,7 +96,6 @@ void setup() {
     for (;;)
       ;  // Don't proceed, loop forever
   }
-
 
   digitalWrite(LED_BUILTIN,LOW);
 
@@ -109,14 +110,12 @@ void setup() {
 
   digitalWrite(LED_BUILTIN, HIGH);
   delay(2000);
- 
 }
-
 
 void loop() {
   unsigned long start_time;
   unsigned long end_time;
-
+ 
   unsigned long exec_time =  LOOP_DELAY - end_time - start_time;
   if (exec_time < 0){
      Serial.printf("Shorter than 0 delay required: %i setting to 0\n", exec_time);
@@ -167,7 +166,10 @@ void update() {
         g_last_state = COMPASS_STATE;
         dial.setBase(1, 5);
         offMenu.display(dial.getRotation()); 
-      } else displayCompass(1);
+      } else {
+        g_auto_on = false;
+        displayCompass(1);
+      }
       break;
 
     case AUTO_START_STATE:
@@ -188,7 +190,10 @@ void update() {
         g_last_state = AUTO_RETURN_STATE;
         dial.setBase(1, 5);
         onMenu.display(dial.getRotation());
-      } else displayCompass(2);
+      } else {
+        g_auto_on = true;
+        displayCompass(2);
+      }
       break;
 
     case IP_STATE:
@@ -200,7 +205,6 @@ void update() {
       if (action == BUTTON_PUSHED_ACTION) g_state = onMenu.selectedState();
       g_start = true;
       onMenu.display(dial.getRotation());
-
       break;
 
     case OFF_MENU_STATE:
@@ -240,19 +244,42 @@ void update() {
       g_pd = dial.getRotation() * 4.0;
       setParamDisplay(g_pd, "Set PD:");
       break;
-    //case CONFIRM_PORT_TACK_STATE:
-    //  break;
-    //case CONFIRM_STAR_TACK_STATE:
-    //  break;
-    //case PORT_TACK_STATE:
-    //  break;
-    //case STAR_TACK_STATE:
-    //  break;
+
+      case TACK_STATE:
+      dial.setBase(1, 5);
+      if (compass.roll < -9) {       //on starboard tack so turn -90 to be on port tack
+        g_state = CONFIRM_PORT_TACK_STATE;
+      }else if (compass.roll > 9) {   //Port tack so turn +90
+        g_state = CONFIRM_STAR_TACK_STATE;
+      }else{                          // not sure so confirm which
+        g_state = CONFIRM_WHICH_TACK_STATE;
+      } 
+      break;
+    case CONFIRM_PORT_TACK_STATE:
+      if (action == BUTTON_PUSHED_ACTION) g_state = confirmPortMenu.selectedState();
+      confirmPortMenu.display(dial.getRotation());
+      break;
+    case CONFIRM_STAR_TACK_STATE:
+      if (action == BUTTON_PUSHED_ACTION) g_state = confirmStarMenu.selectedState();
+      confirmStarMenu.display(dial.getRotation());
+      break;
+    case CONFIRM_WHICH_TACK_STATE:
+      if (action == BUTTON_PUSHED_ACTION) g_state = confirmWhichMenu.selectedState();
+      confirmWhichMenu.display(dial.getRotation());
+      break;
+    case PORT_TACK_STATE:
+      g_desired_heading = dial.withinCircle(compass.heading - 90.0);
+      Serial.printf("Port tack desired heading: %1f\n", g_desired_heading);
+      g_state = AUTO_RETURN_STATE;
+      break;
+    case STAR_TACK_STATE:
+      g_desired_heading = dial.withinCircle(compass.heading + 90.0);
+      Serial.printf("Starboard tack desired heading: %1f\n", g_desired_heading);
+      g_state = AUTO_RETURN_STATE;
+      break;
     default:
       g_state =  COMPASS_STATE;
-
   }
- 
 }
 
 void slow_update() {
@@ -263,52 +290,78 @@ void slow_update() {
 
 
 void fast_update() {
-  String helm_str, status_str;
-  char buff[15];
+  char buff[81] = "$PXXS1,";
+  int l = 0;
 
   digitalWrite(LED_BUILTIN, HIGH);
 
   dial.readAngle();
   compass.readCompass();
 
-  if (g_state == AUTO_STATE) {
-    helm_str = "A:1";
+  if (g_auto_on  == true) {
+    buff[7] = '1';
   }else{
-    helm_str = "A:0";
+    buff[7] = '0';
   }
+  buff[8] = ',';
  
-  dtostrf(compass.heading, 1, 1, buff);
-  helm_str += ",H:" + String(buff);
+  dtostrf(compass.heading, 1, 1, &buff[9]);
+  l = strlen(buff);
+  buff[l++] = ',';
+  buff[l++] = 'M';
+  buff[l++] = ',';
 
-  dtostrf(g_desired_heading, 1, 1, buff);
-  helm_str += ",C:" + String(buff);
 
-  status_str = String(compass.cmps12_status);
-  helm_str += ",S:" + String(status_str);
+  dtostrf(g_desired_heading, 1, 1, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
+    buff[l++] = 'M';
+  buff[l++] = ',';
+  
+  strncat(&buff[l], (compass.status_str()).c_str(), 4); 
+  l = strlen(buff);
+  buff[l++] = ',';
 
-  dtostrf(compass.pitch, 1, 0, buff);
-  helm_str += ",P:" + String(buff);
+  dtostrf(compass.pitch, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
+  
+  dtostrf(compass.roll, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
 
-  dtostrf(compass.roll, 1, 0, buff);
-  helm_str += ",R:" + String(buff);
+  dtostrf(compass.temperature, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
 
-  dtostrf(compass.temperature, 1, 0, buff);
-  helm_str += ",T:" + String(buff);
+  dtostrf(g_gain, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
 
-  dtostrf(g_gain, 1, 0, buff);
-  helm_str += ",g:" + String(buff);
+  dtostrf(g_pi, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
 
-  dtostrf(g_pi, 1, 0, buff);
-  helm_str += ",i:" + String(buff);
+  dtostrf(g_pd, 1, 0, &buff[l]);
+   
+  addCheckSum(buff);
 
-  dtostrf(g_pd, 1, 0, buff);
-  helm_str += ",d:" + String(buff) + "\n";
+  udpComms.broadcast(buff);
 
-  udpComms.broadcast(helm_str);
+  
 
   digitalWrite(LED_BUILTIN, LOW);;
 }
 
+void addCheckSum(char* buf){
+	int check_sum = 0;
+  int i;
+
+	for (i = 1; i < strlen(buf); i++) {
+		check_sum ^= (int)(buf[i]);
+	}
+  sprintf(&buf[i], "*%02X\n", check_sum);
+}
 
 /*
 -------------   Display Screens --------
@@ -316,8 +369,10 @@ void fast_update() {
 */
 
 void displayIP(){
-    if (udpComms.getMessage() != "") Serial.printf("Got message: %s\n",udpComms.getMessage());
-    udpComms.nextMessage();
+    if (udpComms.messageAvailable()){
+        Serial.printf("Got message in prog: %s\n",udpComms.receivedMessage);
+        udpComms.nextMessage();
+    }
    
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -366,7 +421,8 @@ void displayCompass(int type) {
   char buff[9];
   float course_error;
   float abs_course_error;
-  String heading_str, wifi_status_str, display_str, desired_heading_str, course_error_str;
+  char display_buf[23];
+  String heading_str, wifi_status_str, desired_heading_str, course_error_str;
   g_desired_heading = dial.getRotation();
   course_error = compass.courseError(g_desired_heading);
   abs_course_error = abs(course_error);
@@ -390,24 +446,19 @@ void displayCompass(int type) {
     }
   }
   course_error_str += buff;
-
-  display_str = compass.status_str();
-
+  
   dtostrf(compass.heading, 3, 0, buff);
   heading_str = buff;
 
   dtostrf(g_desired_heading, 3, 0, buff);
   desired_heading_str = buff;
 
-  dtostrf(compass.pitch, 6, 0, buff);
-  display_str += buff;
+  strncat(&display_buf[0], (compass.status_str()).c_str(), 4); 
 
-  dtostrf(compass.roll, 6, 0, buff);
-  display_str += buff;
-
-  dtostrf(g_battery_volts, 5, 1, buff);
-  display_str += buff;
-
+  dtostrf(compass.pitch, 6, 0, &display_buf[strlen(display_buf)]);
+  dtostrf(compass.roll, 6, 0, &display_buf[strlen(display_buf)]);
+  dtostrf(g_battery_volts, 5, 1, &display_buf[strlen(display_buf)]);
+  
   display.clearDisplay();  // Clear the display buffer
 
   display.setTextColor(SSD1306_WHITE);
@@ -439,6 +490,6 @@ void displayCompass(int type) {
   display.setCursor(0, 17);
   display.setTextSize(1);
   display.println(F("MAGS Pitch  Roll  Bat"));
-  display.println(display_str);
+  display.println(display_buf);
   display.display();
 }

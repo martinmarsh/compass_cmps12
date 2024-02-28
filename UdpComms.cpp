@@ -23,20 +23,24 @@ UdpComms::UdpComms(char* ssid, char* password, char* ssid2, char* password2, int
     this->password2_ = password2;
     this->broadcastPort_ = broadcastPort;
     this->listenPort_ = listenPort;
+    this->receivedMessage = "";
+    this->messageReady_  = false;
     g_recLocked = false;
 }
 
-String UdpComms::getMessage(){
-  if (g_recLocked == true){
-      return String((char*) &g_recBuf);
+bool UdpComms::messageAvailable(){
+  if (g_recLocked == true && this->messageReady_ == false){
+      this->receivedMessage = (char *) g_recBuf;
+      this->messageReady_ = true;
+      Serial.printf("Set message available:  %u byte buffer: %s message: %s\n", g_recLen, g_recBuf, this->receivedMessage);
   } 
-  return "";
+  return this->messageReady_;
 }
+
 
 void UdpComms::nextMessage(){
-  if (g_recLocked == true){
-    g_recLocked = false;
-  } 
+  this->messageReady_ = false;
+  g_recLocked = false;
 }
 
 String UdpComms::localIP(){
@@ -121,6 +125,7 @@ void UdpComms::stateMachine(){
           size_t g_recLen = packet.read(g_recBuf, 60);
           if (g_recLen > 0 && g_recLen <= 61) {
               g_recBuf[g_recLen] = 0;
+              Serial.printf("Got message in call back:  %u byte %s\n", g_recLen, g_recBuf);
               packet.printf("Got %u bytes\n", g_recLen);
           } else{
             // discard packet
