@@ -12,7 +12,8 @@
 #include "UdpComms.h"
 #include "Menu.h"
 
-
+//Assumes FireBeetle-ESP32 board setting and compatible hardware
+//
 //The wifi passwords are stored in net_config.h which is not commited to public repo
 //for security of wifi passwords etc
 //Your must rename example_net_config.h to net_config.h when your passwords are set
@@ -43,6 +44,8 @@ float g_pd = 100;
 
 bool g_start = true;
 bool g_auto_on = false;
+bool g_steer_on = false;
+bool g_steer_set_base = false;
 
 float g_battery_volts;
 
@@ -56,8 +59,8 @@ float g_desired_heading = 0;
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
  
-char * off_choices[] = {"Exit", "on", "IP", "Gain", "Pi", "PD"};
-states off_states[] = {COMPASS_STATE, AUTO_START_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
+char * off_choices[] = {"Exit", "on", "Steer", "IP", "Gain", "Pi", "PD"};
+states off_states[] = {COMPASS_STATE, AUTO_START_STATE, STEER_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
 char * on_choices[] = {"Exit", "off", "tack", "IP", "Gain", "Pi", "PD"};
 states on_states[] = {AUTO_STATE, COMPASS_STATE, TACK_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
 states confim_port_tack[] = {PORT_TACK_STATE, AUTO_RETURN_STATE};
@@ -68,7 +71,7 @@ char * tack_starboard[] = {"Go -->", "abort"};
 char * tack_port[] = {"Go <--", "abort"};
 char * tack_which[] = {"tack abort", "<--", "-->"};
 
-Menu offMenu(off_choices, 6, off_states, &display);
+Menu offMenu(off_choices, 7, off_states, &display);
 Menu onMenu(on_choices, 7, on_states, &display);
 
 Menu confirmPortMenu(tack_port, 2, confim_port_tack, &display);
@@ -164,6 +167,7 @@ void update() {
       if (action == BUTTON_PUSHED_ACTION){
         g_state = OFF_MENU_STATE;
         g_last_state = COMPASS_STATE;
+        g_steer_on = false;
         dial.setBase(1, 5);
         offMenu.display(dial.getRotation()); 
       } else {
@@ -172,10 +176,22 @@ void update() {
       }
       break;
 
+    case STEER_STATE:
+      Serial.println("Steer state");
+      g_state = COMPASS_STATE;
+      g_last_state = STEER_STATE;
+      g_auto_on = false;
+      g_steer_on = true;
+      g_steer_set_base = true;
+      g_desired_heading = 0;
+      dial.setBase(8, g_desired_heading);  
+      break;
+
     case AUTO_START_STATE:
       Serial.println("Auto start state");
       dial.setBase(8, compass.heading);    //8 turns for 360 - current heading is set on dial
       g_state = AUTO_STATE;
+      g_steer_on = false;
       break;
 
     case AUTO_RETURN_STATE:
@@ -192,6 +208,7 @@ void update() {
         onMenu.display(dial.getRotation());
       } else {
         g_auto_on = true;
+        g_steer_on = false;
         displayCompass(2);
       }
       break;
@@ -292,64 +309,83 @@ void slow_update() {
 void fast_update() {
   char buff[81] = "$PXXS1,";
   int l = 0;
+  float steer;
 
   digitalWrite(LED_BUILTIN, HIGH);
 
   dial.readAngle();
   compass.readCompass();
+  if (g_steer_on == false) {
 
-  if (g_auto_on  == true) {
-    buff[7] = '1';
-  }else{
-    buff[7] = '0';
-  }
-  buff[8] = ',';
+    if (g_auto_on  == true) {
+      buff[7] = '1';
+    }else{
+      buff[7] = '0';
+    }
+    buff[8] = ',';
  
-  dtostrf(compass.heading, 1, 1, &buff[9]);
-  l = strlen(buff);
-  buff[l++] = ',';
-  buff[l++] = 'M';
-  buff[l++] = ',';
-
-
-  dtostrf(g_desired_heading, 1, 1, &buff[l]);
-  l = strlen(buff);
-  buff[l++] = ',';
+    dtostrf(compass.heading, 1, 1, &buff[9]);
+    l = strlen(buff);
+    buff[l++] = ',';
     buff[l++] = 'M';
-  buff[l++] = ',';
+    buff[l++] = ',';
+
+
+    dtostrf(g_desired_heading, 1, 1, &buff[l]);
+    l = strlen(buff);
+    buff[l++] = ',';
+    buff[l++] = 'M';
+    buff[l++] = ',';
   
-  strncat(&buff[l], (compass.status_str()).c_str(), 4); 
-  l = strlen(buff);
-  buff[l++] = ',';
+    strncat(&buff[l], (compass.status_str()).c_str(), 4); 
+    l = strlen(buff);
+    buff[l++] = ',';
 
-  dtostrf(compass.pitch, 1, 0, &buff[l]);
-  l = strlen(buff);
-  buff[l++] = ',';
+    dtostrf(compass.pitch, 1, 0, &buff[l]);
+    l = strlen(buff);
+    buff[l++] = ',';
   
-  dtostrf(compass.roll, 1, 0, &buff[l]);
-  l = strlen(buff);
-  buff[l++] = ',';
+    dtostrf(compass.roll, 1, 0, &buff[l]);
+    l = strlen(buff);
+    buff[l++] = ',';
 
-  dtostrf(compass.temperature, 1, 0, &buff[l]);
-  l = strlen(buff);
-  buff[l++] = ',';
+    dtostrf(compass.temperature, 1, 0, &buff[l]);
+    l = strlen(buff);
+    buff[l++] = ',';
 
-  dtostrf(g_gain, 1, 0, &buff[l]);
-  l = strlen(buff);
-  buff[l++] = ',';
+    dtostrf(g_gain, 1, 0, &buff[l]);
+    l = strlen(buff);
+    buff[l++] = ',';
 
-  dtostrf(g_pi, 1, 0, &buff[l]);
-  l = strlen(buff);
-  buff[l++] = ',';
+    dtostrf(g_pi, 1, 0, &buff[l]);
+    l = strlen(buff);
+    buff[l++] = ',';
 
-  dtostrf(g_pd, 1, 0, &buff[l]);
+    dtostrf(g_pd, 1, 0, &buff[l]);
+  
+  } else {
+
+    buff[5] = '2';   // ie $PXXS2,  just overwrite the 1
+    if (g_steer_set_base  == true) {
+      buff[7] = '1';
+    }else{
+      buff[7] = '0';
+    }
+    buff[8] = ',';
+
+    steer = g_desired_heading;
+    if (steer > 180){
+      steer = steer - 360;
+    }
+
+    dtostrf(-steer*100, 1, 0, &buff[9]);
+    l = strlen(buff);
+    g_steer_set_base = false;
+
+  }
    
   addCheckSum(buff);
-
   udpComms.broadcast(buff);
-
-  
-
   digitalWrite(LED_BUILTIN, LOW);;
 }
 

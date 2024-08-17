@@ -20,7 +20,9 @@ enum states { COMPASS_STATE,
               CONFIRM_WHICH_TACK_STATE,
               TACK_STATE,
               PORT_TACK_STATE,
-              STAR_TACK_STATE };
+              STAR_TACK_STATE,
+              STEER_STATE,
+               };
 
 class Menu  {
   
