@@ -16,9 +16,14 @@ class Dial  {
     void readAngle();
     void checkAS5600Setup();
     float getRotation();
+    float getLeftRightRotation(float min, float max);
     void  setBase(int turns, float offset_degrees);
+
     float withinCircle(float x);
-    
+    float LeftRight(float x);
+    int  base_angle;
+    float base_offset;
+
   private:
     bool button_pushed_;
     int angle_;                   // angle 4096 full circle
@@ -29,11 +34,9 @@ class Dial  {
     int magnet_status_;
     int turns_modulus_;
     float scale_turns_;
-    float offset_ ;               //degress
+    float offset_;               //degress
     int button_release_count_;
-
     int last_angle_read_;         // used rotation detector only
-
     void checkMagnetPresence_();
     void readRawAngle_();
     void computeRotations_();

@@ -56,13 +56,14 @@ enum actions { NO_ACTION,
 states g_state = COMPASS_STATE;
 states g_last_state;
 float g_desired_heading = 0;
+float g_desired_helm = 0;
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
  
 char * off_choices[] = {"Exit", "on", "Steer", "IP", "Gain", "Pi", "PD"};
 states off_states[] = {COMPASS_STATE, AUTO_START_STATE, STEER_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
 char * on_choices[] = {"Exit", "off", "tack", "IP", "Gain", "Pi", "PD"};
-states on_states[] = {AUTO_STATE, COMPASS_STATE, TACK_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
+states on_states[] = {AUTO_RETURN_STATE, COMPASS_STATE, TACK_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
 states confim_port_tack[] = {PORT_TACK_STATE, AUTO_RETURN_STATE};
 states confim_star_tack[] = {STAR_TACK_STATE, AUTO_RETURN_STATE};
 states confim_which_tack[] = {AUTO_RETURN_STATE, PORT_TACK_STATE, STAR_TACK_STATE};
@@ -128,6 +129,7 @@ void loop() {
   delay(exec_time);
   start_time = millis();
   dial.readPushButton();
+  dial.readAngle();
   switch(loop_phase){
     case 0:
         fast_update();
@@ -148,8 +150,10 @@ void loop() {
       Serial.printf("Phase Error in loop: %i\n", loop_phase);
   }
   if (++loop_phase > 2 ) loop_phase = 0;
+  dial.readPushButton();
+  dial.readAngle();
   end_time = millis();
-}
+  }
 
 
 void update() {
@@ -183,8 +187,8 @@ void update() {
       g_auto_on = false;
       g_steer_on = true;
       g_steer_set_base = true;
-      g_desired_heading = 0;
-      dial.setBase(8, g_desired_heading);  
+      g_desired_helm = 0;
+      dial.setBase(8,  g_desired_helm);  
       break;
 
     case AUTO_START_STATE:
@@ -234,20 +238,20 @@ void update() {
       if (action == BUTTON_PUSHED_ACTION) g_state = g_last_state;
        
       if(g_start == true){
-        dial.setBase(8, g_gain/4.0);
+        dial.setBase(8, g_gain);
         g_start = false;
       }
-      g_gain = dial.getRotation()*4.0;
+      g_gain = dial.getLeftRightRotation(1, 5000);
       setParamDisplay(g_gain, "Set Gain:");
       break;
 
     case PI_STATE:
       if (action == BUTTON_PUSHED_ACTION) g_state = g_last_state;
       if(g_start == true){
-        dial.setBase(8, g_pi/4.0);
+        dial.setBase(8, g_pi);
         g_start = false;
       }
-      g_pi = dial.getRotation() * 4.0;
+      g_pi = dial.getLeftRightRotation(0, 5000);
       setParamDisplay(g_pi, "Set PI:");
       break;
 
@@ -255,10 +259,10 @@ void update() {
       if (action == BUTTON_PUSHED_ACTION) g_state = g_last_state;
 
       if(g_start == true){
-        dial.setBase(8, g_pd/4.0);
+        dial.setBase(8, g_pd);
         g_start = false;
       }
-      g_pd = dial.getRotation() * 4.0;
+      g_pd = dial.getLeftRightRotation(0, 120);
       setParamDisplay(g_pd, "Set PD:");
       break;
 
@@ -309,11 +313,9 @@ void slow_update() {
 void fast_update() {
   char buff[81] = "$PXXS1,";
   int l = 0;
-  float steer;
 
   digitalWrite(LED_BUILTIN, HIGH);
 
-  dial.readAngle();
   compass.readCompass();
   if (g_steer_on == false) {
 
@@ -373,14 +375,11 @@ void fast_update() {
     }
     buff[8] = ',';
 
-    steer = g_desired_heading;
-    if (steer > 180){
-      steer = steer - 360;
-    }
-
-    dtostrf(-steer*100, 1, 0, &buff[9]);
+    dtostrf(g_desired_helm*100, 1, 0, &buff[9]);
     l = strlen(buff);
     g_steer_set_base = false;
+
+    Serial.println(g_desired_helm);
 
   }
    
@@ -459,7 +458,12 @@ void displayCompass(int type) {
   float abs_course_error;
   char display_buf[23];
   String heading_str, wifi_status_str, desired_heading_str, course_error_str;
-  g_desired_heading = dial.getRotation();
+  if (g_steer_on == true){
+    g_desired_helm = dial.getLeftRightRotation(-180, 180);
+
+  } else {
+    g_desired_heading = dial.getRotation();
+  }
   course_error = compass.courseError(g_desired_heading);
   abs_course_error = abs(course_error);
 

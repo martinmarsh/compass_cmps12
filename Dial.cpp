@@ -10,7 +10,10 @@ Dial::Dial() {
   this->turns_modulus_ = 4096;
   this->scale_turns_ = 0.087890625;
   this->offset_= 0;
+  this->base_angle = 0;
+  this->base_offset = 0;
   this->button_release_count_ = 0;
+  this->last_angle_read_ = 0;
 }
 
 
@@ -62,13 +65,22 @@ void Dial::setBase(int turns, float offset_degrees) {
   // sets number of full turns/rotations for 360
   // sets the zero point in degrees.
   // Can be changes any time before getRoation
+  float rotation;
   if (turns > 0) {
     this->turns_modulus_ = 4096 * turns;
     this->scale_turns_ = 0.087890625 / turns;
     this->offset_= 0;   //zero offset for getRotation to find true rotation
-
-    this->offset_ = this->getRotation() - offset_degrees;
-    Serial.printf("Dial base = %i, offset: %.2f\n",turns, this->offset_);
+    if (this->rotations_ > 0 ){
+       this->rotations_ = 0;
+    } else if (this->rotations_ < 0 ){
+        this->rotations_ = -1;
+    }
+    rotation = this->getRotation();
+    this->base_angle = this->angle_;
+    this->base_offset = offset_degrees;
+    this->offset_ = rotation - offset_degrees;
+    Serial.printf("Dial base turns= %i, total offset: %.2f, rotation:  %.2f, set offset:  %.2f, angle: %i\n",turns,
+     this->offset_, rotation, offset_degrees, this->base_angle);
   }
 }
 
@@ -83,10 +95,34 @@ float Dial::withinCircle(float x){
   return x;
 }
 
-float Dial::getRotation() {
-  // turns is number of roations for 360
-  return this->withinCircle((abs((this->angle_ + this->rotations_ * 4096) % (this->turns_modulus_)) * this->scale_turns_) - this->offset_);
+float Dial::LeftRight(float x){
+  // Returns Left or Right deflection -180 to +180
+  if (x > 180.0){
+      x = x - 360.0;
+  }
+  return x;
 }
+
+float Dial::getRotation() {
+  //returns 0 to 360 with finer resolution due to multi-turn scalling. The offset applied will push outside a circle so
+  //this is corrected by within circle function.
+  //The offset is used to fix a menu position value or return a preset value and to compensate for starting wheel position
+ 
+  return this->withinCircle(((abs(this->angle_ + this->rotations_ * 4096) % this->turns_modulus_) * this->scale_turns_) - this->offset_);
+}
+
+float Dial::getLeftRightRotation(float min, float max) {
+  // turns degrees scaled by multi-turns  
+  float value = ((this->angle_ - this->base_angle) + this->rotations_ * 4096) * this->scale_turns_ + this->base_offset;
+  if (value < min){
+    value = min;
+  }
+  if (value > max){
+    value = max;
+  }
+  return value;
+}
+
 
 // AS5600 Rotation sensor  Code
 // ----------------------
