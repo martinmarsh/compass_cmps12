@@ -55,6 +55,10 @@ String UdpComms::broadcastPort(){
    return String(this->broadcastPort_);
 }
 
+void UdpComms::setBroadcastPort(int port){
+   this->broadcastPort_ = port;
+}
+
 void UdpComms::connectWiFi_() {
 
   if (WiFi.waitForConnectResult() != WL_CONNECTED) {

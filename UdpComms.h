@@ -35,6 +35,7 @@ class UdpComms {
     String localIP();
     String listenPort();
     String broadcastPort();
+    void setBroadcastPort(int port);
     bool messageAvailable();
     void nextMessage();
     char* receivedMessage;

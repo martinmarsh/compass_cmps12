@@ -13,6 +13,9 @@ void Compass::readCompass() {
   Wire.write(0X02);
   Wire.endTransmission(false);
   Wire.requestFrom(CMPS12, 4);
+  while (Wire.available() < 4)
+      ;  //wait until available
+
   this->heading = (int16_t)(Wire.read() << 8 | Wire.read()) / 10.00;  //Two bytes Yaw in range of (0 to 359 degrees)
   this->pitch1_ = ((int8_t)Wire.read());                              // One byte pitch in range of (-90 to 90 degrees)
   this->roll = ((int8_t)Wire.read());                                 // One byte roll in range of (-90 to 90 degrees)
@@ -21,6 +24,10 @@ void Compass::readCompass() {
   Wire.write(0x18);
   Wire.endTransmission(false);
   Wire.requestFrom(CMPS12, 7);
+
+  while (Wire.available() < 7)
+      ;  //wait until available
+
   this->temperature = (int16_t)(Wire.read() << 8 | Wire.read());        // Temperature
   this->bosh_heading_ = (int16_t)(Wire.read() << 8 | Wire.read()) / 16;  // Boss Bearing
   this->pitch = (int16_t)(Wire.read() << 8 | Wire.read());             // Two bytes pitch in range of (-180 to 180 degrees)

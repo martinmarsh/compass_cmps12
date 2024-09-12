@@ -12,6 +12,7 @@ enum states { COMPASS_STATE,
               IP_STATE,
               OFF_MENU_STATE,
               ON_MENU_STATE,
+              COMMS_STATE,
               GAIN_STATE,
               PI_STATE,
               PD_STATE,
@@ -22,6 +23,8 @@ enum states { COMPASS_STATE,
               PORT_TACK_STATE,
               STAR_TACK_STATE,
               STEER_STATE,
+              MASTER_COMMS_STATE,
+              DIRECT_COMMS_STATE,
                };
 
 class Menu  {

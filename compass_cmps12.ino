@@ -42,6 +42,8 @@ float g_gain = 100;
 float g_pi = 100;
 float g_pd = 100;
 
+bool g_direct_mode = false;  //starts up expecting to connect via RPi  direct send to helm directly when no RPi controller
+
 bool g_start = true;
 bool g_auto_on = false;
 bool g_steer_on = false;
@@ -60,25 +62,28 @@ float g_desired_helm = 0;
 
 UdpComms udpComms(SSID_A, PASSWORD_A, SSID_B, PASSWORD_B, BROADCAST_PORT, LISTEN_PORT, RETRY_PASSWORD);
  
-char * off_choices[] = {"Exit", "on", "Steer", "IP", "Gain", "Pi", "PD"};
-states off_states[] = {COMPASS_STATE, AUTO_START_STATE, STEER_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
+char * off_choices[] = {"Exit", "on", "Steer", "Comms", "IP", "Gain", "Pi", "PD"};
+states off_states[] = {COMPASS_STATE, AUTO_START_STATE, STEER_STATE, COMMS_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
 char * on_choices[] = {"Exit", "off", "tack", "IP", "Gain", "Pi", "PD"};
 states on_states[] = {AUTO_RETURN_STATE, COMPASS_STATE, TACK_STATE, IP_STATE, GAIN_STATE, PI_STATE, PD_STATE};
 states confim_port_tack[] = {PORT_TACK_STATE, AUTO_RETURN_STATE};
 states confim_star_tack[] = {STAR_TACK_STATE, AUTO_RETURN_STATE};
 states confim_which_tack[] = {AUTO_RETURN_STATE, PORT_TACK_STATE, STAR_TACK_STATE};
+char * comms_choices[] = {"Exit", "master", "direct"};
+states comms_states[] = {COMPASS_STATE, MASTER_COMMS_STATE, DIRECT_COMMS_STATE};
 
 char * tack_starboard[] = {"Go -->", "abort"};
 char * tack_port[] = {"Go <--", "abort"};
 char * tack_which[] = {"tack abort", "<--", "-->"};
 
-Menu offMenu(off_choices, 7, off_states, &display);
+Menu offMenu(off_choices, 8, off_states, &display);
 Menu onMenu(on_choices, 7, on_states, &display);
 
 Menu confirmPortMenu(tack_port, 2, confim_port_tack, &display);
 Menu confirmStarMenu(tack_starboard, 2, confim_star_tack, &display);
 Menu confirmWhichMenu(tack_which, 3, confim_which_tack, &display);
 
+Menu commsMenu(comms_choices, 3, comms_states, &display);
 
 int update_counter = 0;
 int slow_update_counter = 0;
@@ -298,6 +303,19 @@ void update() {
       Serial.printf("Starboard tack desired heading: %1f\n", g_desired_heading);
       g_state = AUTO_RETURN_STATE;
       break;
+    case COMMS_STATE:
+      commsMenu.display(dial.getRotation());
+      break;
+    case MASTER_COMMS_STATE:
+      g_direct_mode = false;
+      udpComms.setBroadcastPort(BROADCAST_PORT);
+      break;
+    case DIRECT_COMMS_STATE:
+      g_direct_mode = true;
+      udpComms.setBroadcastPort(BROADCAST_DIRECT_PORT);
+      break;
+
+
     default:
       g_state =  COMPASS_STATE;
   }
@@ -311,58 +329,84 @@ void slow_update() {
 
 
 void fast_update() {
+  /*
+  pxxs1 message create:
+   xs1:
+  - mode        # 0 = idle, 1 = auto helm, 2 = manual steer mode
+  - hdm
+  - set_hdm
+  - compass_status
+  - pitch
+  - roll
+  - compass_temp
+  - auto_gain
+  - auto_pi
+  - auto_pd
+  */
   char buff[81] = "$PXXS1,";
   int l = 0;
 
   digitalWrite(LED_BUILTIN, HIGH);
 
   compass.readCompass();
-  if (g_steer_on == false) {
+
+  
+  if (g_steer_on == false || g_direct_mode == false ) {
 
     if (g_auto_on  == true) {
       buff[7] = '1';
+    }else if (g_steer_on == false){
+      buff[7] = '2';
     }else{
       buff[7] = '0';
     }
     buff[8] = ',';
- 
+
+    // hdm
     dtostrf(compass.heading, 1, 1, &buff[9]);
     l = strlen(buff);
     buff[l++] = ',';
     buff[l++] = 'M';
     buff[l++] = ',';
 
-
+    // set_hdm
     dtostrf(g_desired_heading, 1, 1, &buff[l]);
     l = strlen(buff);
     buff[l++] = ',';
     buff[l++] = 'M';
     buff[l++] = ',';
-  
+
+    // compass_status
     strncat(&buff[l], (compass.status_str()).c_str(), 4); 
     l = strlen(buff);
     buff[l++] = ',';
 
+    // pitch
     dtostrf(compass.pitch, 1, 0, &buff[l]);
     l = strlen(buff);
     buff[l++] = ',';
-  
+    
+    // roll
     dtostrf(compass.roll, 1, 0, &buff[l]);
     l = strlen(buff);
     buff[l++] = ',';
 
+    // compass_temp
     dtostrf(compass.temperature, 1, 0, &buff[l]);
     l = strlen(buff);
     buff[l++] = ',';
 
+    // auto_gain
     dtostrf(g_gain, 1, 0, &buff[l]);
     l = strlen(buff);
     buff[l++] = ',';
 
+    // auto_pi
     dtostrf(g_pi, 1, 0, &buff[l]);
     l = strlen(buff);
     buff[l++] = ',';
 
+    // auto_pd
     dtostrf(g_pd, 1, 0, &buff[l]);
   
   } else {
@@ -375,7 +419,7 @@ void fast_update() {
     }
     buff[8] = ',';
 
-    dtostrf(g_desired_helm*100, 1, 0, &buff[9]);
+    dtostrf(g_desired_helm*-100, 1, 0, &buff[9]);
     l = strlen(buff);
     g_steer_set_base = false;
 
