@@ -304,18 +304,17 @@ void update() {
       g_state = AUTO_RETURN_STATE;
       break;
     case COMMS_STATE:
+      if (action == BUTTON_PUSHED_ACTION) g_state = commsMenu.selectedState();
       commsMenu.display(dial.getRotation());
       break;
     case MASTER_COMMS_STATE:
       g_direct_mode = false;
-      udpComms.setBroadcastPort(BROADCAST_PORT);
+      g_state = COMPASS_STATE;
       break;
     case DIRECT_COMMS_STATE:
       g_direct_mode = true;
-      udpComms.setBroadcastPort(BROADCAST_DIRECT_PORT);
+      g_state = COMPASS_STATE;
       break;
-
-
     default:
       g_state =  COMPASS_STATE;
   }
@@ -351,66 +350,76 @@ void fast_update() {
   compass.readCompass();
 
   
-  if (g_steer_on == false || g_direct_mode == false ) {
 
-    if (g_auto_on  == true) {
-      buff[7] = '1';
-    }else if (g_steer_on == false){
-      buff[7] = '2';
-    }else{
-      buff[7] = '0';
-    }
-    buff[8] = ',';
+  if (g_auto_on  == true) {
+    buff[7] = '1';
+  }else if (g_steer_on == true){
+    buff[7] = '2';
+  }else{
+    buff[7] = '0';
+  }
+  buff[8] = ',';
 
-    // hdm
-    dtostrf(compass.heading, 1, 1, &buff[9]);
-    l = strlen(buff);
-    buff[l++] = ',';
-    buff[l++] = 'M';
-    buff[l++] = ',';
+  // hdm
+  dtostrf(compass.heading, 1, 1, &buff[9]);
+  l = strlen(buff);
+  buff[l++] = ',';
+  buff[l++] = 'M';
+  buff[l++] = ',';
 
-    // set_hdm
-    dtostrf(g_desired_heading, 1, 1, &buff[l]);
-    l = strlen(buff);
-    buff[l++] = ',';
-    buff[l++] = 'M';
-    buff[l++] = ',';
+  // set_hdm
+  dtostrf(g_desired_heading, 1, 1, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
+  buff[l++] = 'M';
+  buff[l++] = ',';
 
-    // compass_status
-    strncat(&buff[l], (compass.status_str()).c_str(), 4); 
-    l = strlen(buff);
-    buff[l++] = ',';
+  // compass_status
+  strncat(&buff[l], (compass.status_str()).c_str(), 4); 
+  l = strlen(buff);
+  buff[l++] = ',';
 
-    // pitch
-    dtostrf(compass.pitch, 1, 0, &buff[l]);
-    l = strlen(buff);
-    buff[l++] = ',';
-    
-    // roll
-    dtostrf(compass.roll, 1, 0, &buff[l]);
-    l = strlen(buff);
-    buff[l++] = ',';
-
-    // compass_temp
-    dtostrf(compass.temperature, 1, 0, &buff[l]);
-    l = strlen(buff);
-    buff[l++] = ',';
-
-    // auto_gain
-    dtostrf(g_gain, 1, 0, &buff[l]);
-    l = strlen(buff);
-    buff[l++] = ',';
-
-    // auto_pi
-    dtostrf(g_pi, 1, 0, &buff[l]);
-    l = strlen(buff);
-    buff[l++] = ',';
-
-    // auto_pd
-    dtostrf(g_pd, 1, 0, &buff[l]);
+  // pitch
+  dtostrf(compass.pitch, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
   
-  } else {
+  // roll
+  dtostrf(compass.roll, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
 
+  // compass_temp
+  dtostrf(compass.temperature, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
+
+  // auto_gain
+  dtostrf(g_gain, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
+
+  // auto_pi
+  dtostrf(g_pi, 1, 0, &buff[l]);
+  l = strlen(buff);
+  buff[l++] = ',';
+
+  // auto_pd
+  dtostrf(g_pd, 1, 0, &buff[l]);
+
+  addCheckSum(buff);
+  
+  if (g_steer_on == false && g_direct_mode == true) {
+    udpComms.setBroadcastPort(BROADCAST_DIRECT_PORT);
+  } else {
+    udpComms.setBroadcastPort(BROADCAST_PORT);
+  }
+
+  udpComms.broadcast(buff);
+  
+  // Now steer instructions
+
+  if (g_steer_on == true) {
     buff[5] = '2';   // ie $PXXS2,  just overwrite the 1
     if (g_steer_set_base  == true) {
       buff[7] = '1';
@@ -424,11 +433,10 @@ void fast_update() {
     g_steer_set_base = false;
 
     Serial.println(g_desired_helm);
-
+    addCheckSum(buff);
+    udpComms.setBroadcastPort(BROADCAST_DIRECT_PORT);
+    udpComms.broadcast(buff);
   }
-   
-  addCheckSum(buff);
-  udpComms.broadcast(buff);
   digitalWrite(LED_BUILTIN, LOW);;
 }
 
@@ -501,9 +509,12 @@ void displayCompass(int type) {
   float course_error;
   float abs_course_error;
   char display_buf[23];
-  String heading_str, wifi_status_str, desired_heading_str, course_error_str;
+  char icon;
+  String helm_str, heading_str, wifi_status_str, desired_heading_str, course_error_str;
   if (g_steer_on == true){
     g_desired_helm = dial.getLeftRightRotation(-180, 180);
+    dtostrf(g_desired_helm, 4, 0, buff);
+    helm_str = buff;
 
   } else {
     g_desired_heading = dial.getRotation();
@@ -552,6 +563,11 @@ void displayCompass(int type) {
     display.setCursor(32, 0);
     display.setTextSize(2);  // Draw 2X-scale text
     display.print(heading_str);
+    if (g_steer_on == true){
+      display.setCursor(0, 0);
+      display.setTextSize(1);  // Draw 1X-scale text
+      display.println(helm_str);
+    }
 
   } else {
     // set course display
@@ -567,7 +583,11 @@ void displayCompass(int type) {
   // Display wifi connected info
   display.setCursor(116, 0);
   display.setTextSize(1);
-  wifi_status_str = udpComms.connectStatusStr();
+  icon = ' ';
+  if (g_direct_mode == true){
+    icon = '.';
+  }
+  wifi_status_str = udpComms.connectStatusStr(icon);
   
   display.print(wifi_status_str);
 

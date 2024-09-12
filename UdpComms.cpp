@@ -85,7 +85,7 @@ void UdpComms::connectWiFi_() {
 }
 
 
-String UdpComms::connectStatusStr(){
+String UdpComms::connectStatusStr(char ready){
   String wifi_status_str;
   if (this->wifi_network == A) {
     wifi_status_str = "A";
@@ -95,7 +95,7 @@ String UdpComms::connectStatusStr(){
   if (this->wifi_status == WIFI_CONNECTING_STATE) {
     wifi_status_str = "xX";
   } else if (this->wifi_listen_status == WIFI_LISTENING_STATE) {
-    wifi_status_str = " " + wifi_status_str;
+    wifi_status_str = ready + wifi_status_str;
   } else {
     wifi_status_str = "x" + wifi_status_str; 
   }

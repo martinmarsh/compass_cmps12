@@ -29,7 +29,7 @@ class UdpComms {
   
   public:
     UdpComms(char* ssid, char* password, char* ssid2, char* password2, int broadcastPort, int listenPort, int retry_attempts);
-    String connectStatusStr();
+    String connectStatusStr(char ready);
     void stateMachine();
     void broadcast(String message);
     String localIP();
