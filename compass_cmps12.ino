@@ -34,6 +34,20 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define LOOP_DELAY 33      //Each loop is 3*loop_delay ms= fast_update period
+
+
+struct mdata {
+    bool check_ok;
+    bool active;
+    float heading;
+    float head_to_way;
+    int check_sum;
+    float gain;
+    float pi;
+    float pd;
+    float error;
+    float change;
+  };
   
 Dial dial;
 Compass compass;
@@ -146,6 +160,7 @@ void loop() {
         }
       break;
     case 2:
+      get_messages();
       if (++slow_update_counter > 16){
           slow_update();
           slow_update_counter = 0;
@@ -159,6 +174,119 @@ void loop() {
   dial.readAngle();
   end_time = millis();
   }
+
+void get_messages() {
+  char* mess;
+  bool ok = true;
+  int message_no = 0;
+  int im;
+  int is;
+  int field;
+  char s[64];
+  mdata message_data;
+  
+  if (udpComms.messageAvailable()){
+    mess = udpComms.receivedMessage;
+    ok = true;
+    message_data.active = false;
+    message_data.check_ok = false;
+    im = 1;
+    is = 0;
+    field = 0;
+    message_no = 0;
+    // $PXXS1,auto,hdm,'M',set_hdm,'M',compass_status,pitch,roll,compass_temp,auto_gain,auto_pi,auto_pd*checksum
+    // $PXXS2, set_base(1 or 0), helm_pos*checksum
+    // $PXXS3, head, head_to_way, auto_gain, auto_pi, auto_pd*checksum
+    //Serial.printf("Processing message = %s\n", mess);
+
+    if (mess[0] != '$'){
+      ok = false;
+    }
+    message_data.check_sum = 0;
+    while (mess[im] != '\0' && ok) {
+
+      if (mess[im] == '*') {
+        char cs[4];
+        mess[im] = ',';  //ensure last value is processed
+        sprintf(&cs[0], "%02X\0",  message_data.check_sum);
+        if (cs[0] == mess[im+1] && cs[1] == mess[im+2]){
+           message_data.check_ok = true;
+        } else {
+          Serial.printf("invalid checksum expected = %s got %c%c\n", cs,mess[im+1], mess[im+2]);
+        }
+      }
+      message_data.check_sum ^= (int)(mess[im]);
+ 
+      if (mess[im] != ',') {
+        s[is] = mess[im]; 
+      } else {
+        s[is] = '\0';
+        if (field == 0 ){
+           if (strcmp(s, "PXXS1") == 0){
+              message_no = 1;
+            } else if  (strcmp(s, "PXXS2") == 0){
+              message_no = 2;
+            } else if  (strcmp(s, "PXXS3") == 0){
+              message_no = 2;
+            } else {
+              ok = false;
+            }
+        } else if (message_no == 1){
+          ok = false;
+        } else if (message_no == 2){
+          ok = false;
+        } else if (message_no == 3){
+          ok = process_message_3(s, field, message_data); 
+        }
+        ++field;
+        is = -1;
+      }
+      if (im > 82 or is > 60){
+        ok = false;   // abort if message parts are too large
+      }
+      im++;
+      is++;
+    }
+
+    udpComms.nextMessage(); 
+  } 
+}
+
+bool process_message_3( char* s, int field, mdata& md){
+  bool ok = true;
+  switch (field){
+     case 1:
+      md.heading = atof(s);
+      break;
+    case 2:
+      md.head_to_way = atof(s);
+      break;
+    case 3:
+      //Serial.print(s);
+      md.gain = atof(s);
+      break;
+    case 4:
+      md.pi = atof(s);
+      break;
+    case 5:
+      md.pd = atof(s);
+      // as we are at the last value process sentence if check_ok
+      if (md.check_ok){
+        if (md.active){
+          g_auto_on = true;
+          g_gain = md.gain;
+          g_pi = md.pi;
+          g_pd = md.pd/120;
+
+          if(g_pd > 1){
+            g_pd = 1;
+          }
+        }
+      }
+  }
+  return ok;
+}
+
 
 
 void update() {
