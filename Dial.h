@@ -17,6 +17,7 @@ class Dial  {
     void checkAS5600Setup();
     float getRotation();
     float getLeftRightRotation(float min, float max);
+    float getRightLeftRotation(float min, float max);
     void  setBase(int turns, float offset_degrees);
 
     float withinCircle(float x);

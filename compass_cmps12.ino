@@ -63,6 +63,10 @@ bool g_auto_on = false;
 bool g_steer_on = false;
 bool g_steer_set_base = false;
 
+bool g_got_master_message = false;
+
+mdata md;
+
 float g_battery_volts;
 
 enum actions { NO_ACTION,
@@ -183,13 +187,13 @@ void get_messages() {
   int is;
   int field;
   char s[64];
-  mdata message_data;
+  
   
   if (udpComms.messageAvailable()){
     mess = udpComms.receivedMessage;
     ok = true;
-    message_data.active = false;
-    message_data.check_ok = false;
+    md.active = false;
+    md.check_ok = false;
     im = 1;
     is = 0;
     field = 0;
@@ -202,20 +206,20 @@ void get_messages() {
     if (mess[0] != '$'){
       ok = false;
     }
-    message_data.check_sum = 0;
+    md.check_sum = 0;
     while (mess[im] != '\0' && ok) {
 
       if (mess[im] == '*') {
         char cs[4];
         mess[im] = ',';  //ensure last value is processed
-        sprintf(&cs[0], "%02X\0",  message_data.check_sum);
+        sprintf(&cs[0], "%02X\0",  md.check_sum);
         if (cs[0] == mess[im+1] && cs[1] == mess[im+2]){
-           message_data.check_ok = true;
+           md.check_ok = true;
         } else {
           Serial.printf("invalid checksum expected = %s got %c%c\n", cs,mess[im+1], mess[im+2]);
         }
       }
-      message_data.check_sum ^= (int)(mess[im]);
+      md.check_sum ^= (int)(mess[im]);
  
       if (mess[im] != ',') {
         s[is] = mess[im]; 
@@ -227,7 +231,7 @@ void get_messages() {
             } else if  (strcmp(s, "PXXS2") == 0){
               message_no = 2;
             } else if  (strcmp(s, "PXXS3") == 0){
-              message_no = 2;
+              message_no = 3;
             } else {
               ok = false;
             }
@@ -236,7 +240,7 @@ void get_messages() {
         } else if (message_no == 2){
           ok = false;
         } else if (message_no == 3){
-          ok = process_message_3(s, field, message_data); 
+          ok = process_message_3(s, field); 
         }
         ++field;
         is = -1;
@@ -252,11 +256,13 @@ void get_messages() {
   } 
 }
 
-bool process_message_3( char* s, int field, mdata& md){
+bool process_message_3( char* s, int field){
   bool ok = true;
   switch (field){
      case 1:
       md.heading = atof(s);
+      Serial.printf("got heading: %1f\n", md.heading);
+
       break;
     case 2:
       md.head_to_way = atof(s);
@@ -272,15 +278,11 @@ bool process_message_3( char* s, int field, mdata& md){
       md.pd = atof(s);
       // as we are at the last value process sentence if check_ok
       if (md.check_ok){
-        if (md.active){
-          g_auto_on = true;
+        if (g_got_master_message == false){
           g_gain = md.gain;
           g_pi = md.pi;
-          g_pd = md.pd/120;
-
-          if(g_pd > 1){
-            g_pd = 1;
-          }
+          g_pd = md.pd;
+          g_got_master_message = true;
         }
       }
   }
@@ -326,7 +328,7 @@ void update() {
 
     case AUTO_START_STATE:
       Serial.println("Auto start state");
-      dial.setBase(8, compass.heading);    //8 turns for 360 - current heading is set on dial
+      dial.setBase(8, get_heading());    //8 turns for 360 - current heading is set on dial
       g_state = AUTO_STATE;
       g_steer_on = false;
       break;
@@ -422,12 +424,12 @@ void update() {
       confirmWhichMenu.display(dial.getRotation());
       break;
     case PORT_TACK_STATE:
-      g_desired_heading = dial.withinCircle(compass.heading - 90.0);
+      g_desired_heading = dial.withinCircle(get_heading() - 90.0);
       Serial.printf("Port tack desired heading: %1f\n", g_desired_heading);
       g_state = AUTO_RETURN_STATE;
       break;
     case STAR_TACK_STATE:
-      g_desired_heading = dial.withinCircle(compass.heading + 90.0);
+      g_desired_heading = dial.withinCircle(get_heading() + 90.0);
       Serial.printf("Starboard tack desired heading: %1f\n", g_desired_heading);
       g_state = AUTO_RETURN_STATE;
       break;
@@ -578,6 +580,16 @@ void addCheckSum(char* buf){
   sprintf(&buf[i], "*%02X\n", check_sum);
 }
 
+
+float get_heading(){
+  if (g_direct_mode){
+    return compass.heading;
+  } else {
+    return md.heading;
+  }
+}
+
+
 /*
 -------------   Display Screens --------
 
@@ -636,18 +648,25 @@ void displayCompass(int type) {
   char buff[9];
   float course_error;
   float abs_course_error;
+  float heading;
   char display_buf[23];
   char icon;
   String helm_str, heading_str, wifi_status_str, desired_heading_str, course_error_str;
+  
+  heading = get_heading();
+
   if (g_steer_on == true){
-    g_desired_helm = dial.getLeftRightRotation(-180, 180);
+    g_desired_helm = dial.getRightLeftRotation(-180, 180);
     dtostrf(g_desired_helm, 4, 0, buff);
     helm_str = buff;
-
   } else {
     g_desired_heading = dial.getRotation();
   }
-  course_error = compass.courseError(g_desired_heading);
+
+  
+  course_error = compass.relative180(heading - g_desired_heading);
+
+  // course_error = compass.courseError(g_desired_heading);
   abs_course_error = abs(course_error);
 
   if (abs_course_error < 10) {
@@ -670,7 +689,7 @@ void displayCompass(int type) {
   }
   course_error_str += buff;
   
-  dtostrf(compass.heading, 3, 0, buff);
+  dtostrf(heading, 3, 0, buff);
   heading_str = buff;
 
   dtostrf(g_desired_heading, 3, 0, buff);

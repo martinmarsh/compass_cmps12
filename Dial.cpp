@@ -123,6 +123,18 @@ float Dial::getLeftRightRotation(float min, float max) {
   return value;
 }
 
+float Dial::getRightLeftRotation(float min, float max) {
+  // turns degrees scaled by multi-turns  
+  float value = (( this->base_angle - this->angle_) - this->rotations_ * 4096) * this->scale_turns_ + this->base_offset;
+  if (value < min){
+    value = min;
+  }
+  if (value > max){
+    value = max;
+  }
+  return value;
+}
+
 
 // AS5600 Rotation sensor  Code
 // ----------------------
